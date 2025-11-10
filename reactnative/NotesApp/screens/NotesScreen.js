@@ -1,167 +1,135 @@
-import React, { useState } from "react";
+// src/screens/NotesScreen.js (updated)
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
-  StyleSheet,
   FlatList,
+  StyleSheet,
+  ActivityIndicator,
   TouchableOpacity,
 } from "react-native";
+import { getNotes } from "../services/note-service";
 import NoteItem from "../components/NoteItem";
-import NoteInput from "../components/NoteInput";
+import AddNoteModal from "../components/AddNoteModal";
 
-// Sample initial notes data
-const initialNotes = [
-  {
-    id: "1",
-    content: "Learn React Native",
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "2",
-    content: "Complete the tutorial",
-    createdAt: new Date().toISOString(),
-  },
-];
-
-export default function NotesScreen() {
-  const [notes, setNotes] = useState(initialNotes);
+const NotesScreen = () => {
+  const [notes, setNotes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
-  const [noteText, setNoteText] = useState("");
-  const [editingNote, setEditingNote] = useState(null);
 
-  // Function to add or update a note
-  const saveNote = () => {
-    if (noteText.trim() === "") return;
+  useEffect(() => {
+    fetchNotes();
+  }, []);
 
-    if (editingNote) {
-      // Update existing note
-      setNotes(
-        notes.map((note) =>
-          note.id === editingNote.id
-            ? {
-                ...note,
-                content: noteText,
-                updatedAt: new Date().toISOString(),
-              }
-            : note
-        )
-      );
-      setEditingNote(null);
-    } else {
-      // Add new note
-      const newNote = {
-        id: Date.now().toString(),
-        content: noteText,
-        createdAt: new Date().toISOString(),
-      };
-      setNotes([newNote, ...notes]);
+  // Function to fetch notes from the database
+  const fetchNotes = async () => {
+    try {
+      setLoading(true);
+      const fetchedNotes = await getNotes();
+      setNotes(fetchedNotes);
+    } catch (err) {
+      console.error("Error fetching notes:", err);
+      setError("Failed to load notes. Please try again.");
+    } finally {
+      setLoading(false);
     }
-
-    setNoteText("");
-    setModalVisible(false);
   };
 
-  // Function to delete a note
-  const deleteNote = (id) => {
-    setNotes(notes.filter((note) => note.id !== id));
+  // Add the new note to the state and avoid refetching
+  const handleNoteAdded = (newNote) => {
+    setNotes((currentNotes) => [newNote, ...currentNotes]);
   };
 
-  // Function to open edit mode
-  const editNote = (note) => {
-    setEditingNote(note);
-    setNoteText(note.content);
-    setModalVisible(true);
-  };
+  // Show loading indicator while fetching data
+  if (loading && notes.length === 0) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color="#0000ff" />
+      </View>
+    );
+  }
 
-  // Function to close the modal
-  const closeModal = () => {
-    setModalVisible(false);
-    setNoteText("");
-    setEditingNote(null);
-  };
+  // Show error message if there was a problem
+  if (error && notes.length === 0) {
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.errorText}>{error}</Text>
+      </View>
+    );
+  }
 
+  // Render the list of notes
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>My Notes</Text>
+        <Text style={styles.title}>My Notes</Text>
         <TouchableOpacity
           style={styles.addButton}
           onPress={() => setModalVisible(true)}
         >
-          <Text style={styles.addButtonText}>+</Text>
+          <Text style={styles.addButtonText}>+ Add Note</Text>
         </TouchableOpacity>
       </View>
 
-      {notes.length > 0 ? (
-        <FlatList
-          data={notes}
-          renderItem={({ item }) => (
-            <NoteItem note={item} onEdit={editNote} onDelete={deleteNote} />
-          )}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.notesList}
-        />
-      ) : (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>No notes yet. Create one!</Text>
-        </View>
-      )}
+      <FlatList
+        data={notes}
+        keyExtractor={(item) => item.$id}
+        renderItem={({ item }) => <NoteItem note={item} />}
+        contentContainerStyle={styles.listContent}
+        refreshing={loading}
+        onRefresh={fetchNotes}
+      />
 
-      <NoteInput
+      <AddNoteModal
         visible={modalVisible}
-        onClose={closeModal}
-        onSave={saveNote}
-        noteText={noteText}
-        setNoteText={setNoteText}
-        isEditing={!!editingNote}
+        onClose={() => setModalVisible(false)}
+        onNoteAdded={handleNoteAdded}
       />
     </View>
   );
-}
+};
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    padding: 16,
     backgroundColor: "#f5f5f5",
   },
   header: {
-    height: 100,
-    backgroundColor: "#3498db",
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-end",
-    paddingBottom: 15,
-    paddingHorizontal: 20,
+    alignItems: "center",
+    marginBottom: 16,
   },
-  headerTitle: {
-    color: "white",
+  title: {
     fontSize: 24,
     fontWeight: "bold",
+    color: "#333",
   },
   addButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "white",
-    justifyContent: "center",
-    alignItems: "center",
+    backgroundColor: "#2196F3",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 5,
   },
   addButtonText: {
-    fontSize: 24,
-    color: "#3498db",
+    color: "white",
     fontWeight: "bold",
-    marginTop: -2,
   },
-  notesList: {
-    padding: 15,
+  listContent: {
+    paddingBottom: 20,
   },
-  emptyContainer: {
+  centered: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
   },
-  emptyText: {
-    fontSize: 18,
-    color: "#7f8c8d",
+  errorText: {
+    color: "red",
+    fontSize: 16,
+    textAlign: "center",
   },
 });
+
+export default NotesScreen;
